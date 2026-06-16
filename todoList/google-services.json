@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "174796503128",
+    "project_id": "todomovil-8adb1",
+    "storage_bucket": "todomovil-8adb1.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:174796503128:android:7d31d39450da52cc38f22d",
+        "android_client_info": {
+          "package_name": "com.tuusuario.tuapp"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "174796503128-hp9ocjt555vtl9ggsfdgq2sltmnrh6n7.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.tuusuario.tuapp",
+            "certificate_hash": "5b27ffd8aec6a291fc8d5ba9106f465e8d381d7c"
+          }
+        },
+        {
+          "client_id": "174796503128-l9l5q7p6lv7ta0i2bdfp93eev1bbeup5.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBURfOG4Jype2-jID1L6ruCRswB1_03aBA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "174796503128-l9l5q7p6lv7ta0i2bdfp93eev1bbeup5.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
