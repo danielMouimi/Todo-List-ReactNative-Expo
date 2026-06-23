@@ -1,6 +1,6 @@
 import * as React from 'react';
 import '@react-native-firebase/app';
-import { Text, View, StyleSheet, ActivityIndicator, Alert, SafeAreaView, TouchableOpacity } from 'react-native';
+import { Text, View, StyleSheet, ActivityIndicator, Alert, SafeAreaView, TouchableOpacity, ScrollView } from 'react-native';
 import {
   createStaticNavigation,
   useNavigation,
@@ -237,6 +237,7 @@ if (!user.emailVerified) {
   // CASO 3: Usuario autenticado y verificado
 return (
   <SafeAreaView style={styles.container}>
+    <ScrollView>
     <View style={styles.content}>
 
       <View style={styles.appHeader}>
@@ -280,7 +281,7 @@ return (
         <TouchableOpacity
           style={styles.actionCard}
           onPress={() =>
-            navigation.navigate('MainTabs', { screen: 'TodoList' })
+            navigation.navigate('MainTabs', { screen: 'Tasks' })
           }
         >
           <Text style={styles.actionIcon}>📋</Text>
@@ -329,6 +330,7 @@ return (
         </View>
 
     </View>
+    </ScrollView>
   </SafeAreaView>
 );
 }
@@ -485,6 +487,7 @@ quickActions: {
 },
 
 actionCard: {
+  flex: 1,
   backgroundColor: '#FFFFFF',
   borderRadius: 20,
   padding: 20,
@@ -498,6 +501,7 @@ actionCard: {
   shadowRadius: 10,
 
   elevation: 4,
+  
 },
 actionRow: {
   flexDirection: 'row',

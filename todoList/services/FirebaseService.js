@@ -178,6 +178,66 @@ export const TaskService = {
 // ============ SERVICIOS DE GRUPOS ============
 
 export const GroupService = {
+
+  // Reseteo diario 
+async checkAndResetDailyTasks (groupId){
+    try {
+      const groupRef = firestore().collection('workgroups').doc(groupId);
+      const groupDoc = await groupRef.get();
+
+      if (!groupDoc.exists) return;
+
+      const groupData = groupDoc.data();
+      const todayStr = new Date().toLocaleDateString('es-ES'); // Ejemplo: "19/6/2026"
+      
+      // Si ya se hizo el reseteo hoy, no hacemos nada y salimos
+      if (groupData.lastDailyReset === todayStr) {
+        console.log('Las tareas diarias ya fueron reseteadas hoy.');
+        return;
+      }
+
+      console.log('Nuevo día detectado. Reseteando tareas diarias...');
+
+      // 1. Buscamos las tareas diarias completadas de ESTE grupo
+      const tasksSnapshot = await firestore()
+        .collection('tasks')
+        .where('groupId', '==', groupId)
+        .where('type', '==', 'daily')
+        .where('status', '==', 'completed')
+        .get();
+
+      const batch = firestore().batch();
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      // 2. Si hay tareas completadas, las preparamos para pasarlas a 'pending'
+      if (!tasksSnapshot.empty) {
+        tasksSnapshot.docs.forEach((doc) => {
+          batch.update(firestore().collection('tasks').doc(doc.id), {
+            status: 'pending',
+            dueDate: tomorrow,
+            updatedAt: new Date()
+          });
+        });
+      }
+
+      // 3. Marcamos el grupo como "reseteado hoy" para que el siguiente usuario no repita el proceso
+      batch.update(groupRef, {
+        lastDailyReset: todayStr
+      });
+
+      // Ejecutamos todo en bloque de forma atómica
+      await batch.commit();
+      console.log('Reseteo diario completado con éxito de forma gratuita.');
+
+    } catch (error) {
+      console.error('Error en el reseteo diario alternativo:', error);
+    }
+  },
+
+
+
+
   // Crear grupo
   async createGroup(groupData) {
     try {
@@ -280,8 +340,13 @@ export const GroupService = {
 
       await db.collection('workgroups').doc(groupId).update({
         members,
-        joinRequests
       });
+
+      await db.collection('workgroups')
+        .doc(groupId)
+        .collection('joinRequests')
+        .doc(userId) // El ID de la solicitud concreta
+        .delete();
 
       // Agregar usuario a groupMembers
       await db
@@ -312,9 +377,12 @@ export const GroupService = {
         return req;
       });
 
-      await db.collection('workgroups').doc(groupId).update({
-        joinRequests
-      });
+       await db.collection('workgroups')
+        .doc(groupId)
+        .collection('joinRequests')
+        .doc(userId) // El ID de la solicitud concreta
+        .delete();
+        
     } catch (error) {
       console.error('Error rejecting join request:', error);
       throw error;
@@ -331,7 +399,79 @@ export const GroupService = {
       console.error('Error fetching pending requests:', error);
       return [];
     }
+  },
+
+async removeMember(groupId, userId) {
+  try {
+    if (!groupId || !userId) {
+      throw new Error('Se requiere un groupId y un userId válidos');
+    }
+
+    const batch = firestore().batch();
+
+    // 1. Referencia para quitar al usuario del array de miembros del grupo
+    const groupRef = firestore().collection('workgroups').doc(groupId);
+    batch.update(groupRef, {
+      members: firestore.FieldValue.arrayRemove(userId)
+    });
+
+    // 2. Buscar todas las tareas de este grupo asignadas a este usuario para eliminarlas
+    const tasksSnapshot = await firestore()
+      .collection('tasks')
+      .where('groupId', '==', groupId)
+      .where('userId', '==', userId) // Filtra las tareas que le pertenecían a él
+      .get();
+
+    // Añadimos cada borrado de tarea al mismo viaje (batch)
+    tasksSnapshot.docs.forEach((doc) => {
+      batch.delete(doc.ref);
+    });
+
+    const memberRef = firestore().collection('groupMembers').doc(groupId).collection('members').doc(userId);
+    batch.delete(memberRef);
+
+    // 3. Ejecutamos todas las operaciones de golpe
+    await batch.commit();
+
+    console.log(`Usuario ${userId} y sus tareas asignadas eliminados con éxito del grupo ${groupId}`);
+  } catch (error) {
+    console.error('Error in GroupService.removeMember:', error);
+    throw error;
   }
+},
+
+async deleteGroup(groupId) {
+  try {
+    if (!groupId) throw new Error('Se requiere un groupId válido');
+
+    const batch = firestore().batch();
+
+    // 1. Referencia para eliminar el documento del grupo principal
+    const groupRef = firestore().collection('workgroups').doc(groupId);
+    batch.delete(groupRef);
+
+    // 2. Buscar todas las tareas vinculadas a este grupo
+    const tasksSnapshot = await firestore()
+      .collection('tasks')
+      .where('groupId', '==', groupId)
+      .get();
+
+    // Añadimos el borrado en cascada de cada tarea al lote
+    tasksSnapshot.docs.forEach((doc) => {
+      batch.delete(doc.ref);
+    });
+
+    // 3. Confirmamos la transacción atómica
+    await batch.commit();
+
+    console.log(`Grupo ${groupId} y sus ${tasksSnapshot.size} tareas asociadas han sido eliminados por completo.`);
+  } catch (error) {
+    console.error('Error in GroupService.deleteGroup:', error);
+    throw error;
+  }
+},
+  
+  
 };
 
 // ============ SERVICIOS DE USUARIOS ============

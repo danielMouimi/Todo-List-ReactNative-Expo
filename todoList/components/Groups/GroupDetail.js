@@ -49,6 +49,7 @@ export default function GroupDetail() {
   const loadGroupData = async () => {
     try {
       setLoading(true);
+      await GroupService.checkAndResetDailyTasks(groupId);
       const groupDetail = await GroupService.getGroupDetail(groupId);
       setGroup(groupDetail);
 
@@ -88,6 +89,43 @@ export default function GroupDetail() {
       setLoadingStats(false);
     }
   };
+
+const handleRemoveMember = (memberId, memberName) => {
+  // Evitar que el admin se elimine a sí mismo por error desde la lista
+  if (memberId === currentUser.uid) {
+    Alert.alert('Acción no permitida', 'No puedes eliminarte a ti mismo del grupo siendo el Administrador.');
+    return;
+  }
+
+  Alert.alert(
+    'Eliminar Miembro',
+    `¿Estás seguro de que deseas expulsar a ${memberName} del grupo?`,
+    [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Expulsar',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            // Llama al método de tu servicio que remueve al usuario del grupo
+            await GroupService.removeMember(group.id, memberId);
+            
+            Alert.alert('Éxito', `${memberName} ha sido eliminado del grupo.`);
+            
+            // Actualiza el estado local de miembros para refrescar la lista de inmediato sin recargar toda la pantalla
+            setMembers(prevMembers => prevMembers.filter(m => m.id !== memberId));
+          } catch (error) {
+            console.error('Error al eliminar miembro:', error);
+            Alert.alert('Error', 'No se pudo eliminar al participante del grupo.');
+          }
+        },
+      },
+    ]
+  );
+};
+
+
+
 
   // --- CONTROLADORES DE ACCIONES SOBRE TAREAS (ADMIN) ---
 
@@ -161,6 +199,40 @@ const handleShareGroupCode = async () => {
 };
 
 
+const handleDeleteGroup = () => {
+  Alert.alert(
+    '🚨 Eliminar Grupo',
+    `¿Estás seguro de que deseas eliminar permanentemente el grupo "${group.name}"? Esta acción no se puede deshacer y todos los miembros perderán el acceso.`,
+    [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Eliminar de todos modos',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            // 1. Llamar al servicio para borrar de Firestore
+            await GroupService.deleteGroup(group.id);
+            
+            Alert.alert('Eliminado', 'El grupo ha sido borrado correctamente.', [
+              {
+                text: 'OK',
+                onPress: () => {
+                  // 2. Redirigir al usuario a la lista de grupos
+                  navigation.goBack(); 
+                }
+              }
+            ]);
+          } catch (error) {
+            console.error('Error al eliminar el grupo:', error);
+            Alert.alert('Error', 'No se pudo eliminar el grupo en este momento.');
+          }
+        },
+      },
+    ]
+  );
+};
+
+
   if (loading || !group) {
     return (
       <View style={styles.centerContainer}>
@@ -191,7 +263,21 @@ const handleShareGroupCode = async () => {
 
 {/* CABECERA DEL GRUPO */}
 <View style={styles.headerSection}>
-  <Text style={styles.groupTitle}>{group.name}</Text>
+  <View style={styles.titleRow}>
+    <Text style={styles.groupTitle}>{group.name}</Text>
+    
+    {/* 🗑️ Botón de borrar grupo visible solo si eres Admin */}
+    {isCurrentAdmin && (
+      <TouchableOpacity 
+        style={styles.deleteGroupBtn} 
+        onPress={handleDeleteGroup}
+        activeOpacity={0.7}
+      >
+        <Text style={styles.deleteGroupBtnText}>🗑️ Borrar Grupo</Text>
+      </TouchableOpacity>
+    )}
+  </View>
+
   <Text style={styles.groupDesc}>{group.description}</Text>
   
   <View style={styles.idContainer}>
@@ -218,40 +304,54 @@ const handleShareGroupCode = async () => {
 </View>
 
       {/* LISTADO DE COMPONENTES DE MIEMBROS */}
-      <View style={styles.listContainer}>
-        <Text style={styles.sectionTitle}>Participantes ({members.length})</Text>
-        <FlatList
-          data={members}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => {
-            const isUserAdmin = group.admin === item.id;
-            return (
-              <TouchableOpacity
-                style={styles.memberCard}
-                onPress={() => handleMemberPress(item)}
-                disabled={!isCurrentAdmin && item.id !== currentUser.uid}
-                activeOpacity={0.7}
-              >
-                <View style={styles.memberInfo}>
-                  <Text style={styles.avatarPlaceholder}>👤</Text>
-                  <View>
-                    <Text style={styles.memberName}>{item.name}</Text>
-                    <Text style={styles.memberEmail}>{item.email}</Text>
-                  </View>
-                </View>
-                <View style={styles.badgeRow}>
-                  {isUserAdmin && (
-                    <View style={styles.adminBadge}>
-                      <Text style={styles.adminBadgeText}>Admin</Text>
+        <View style={styles.listContainer}>
+          <Text style={styles.sectionTitle}>Participantes ({members.length})</Text>
+          <FlatList
+            data={members}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => {
+              const isUserAdmin = group.admin === item.id;
+              return (
+                <View style={styles.memberCardWrapper}>
+                  <TouchableOpacity
+                    style={styles.memberCard}
+                    onPress={() => handleMemberPress(item)}
+                    disabled={!isCurrentAdmin && item.id !== currentUser.uid}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.memberInfo}>
+                      <Text style={styles.avatarPlaceholder}>👤</Text>
+                      <View>
+                        <Text style={styles.memberName}>{item.name}</Text>
+                        <Text style={styles.memberEmail}>{item.email}</Text>
+                      </View>
                     </View>
+                    
+                    <View style={styles.badgeRow}>
+                      {isUserAdmin && (
+                        <View style={styles.adminBadge}>
+                          <Text style={styles.adminBadgeText}>Admin</Text>
+                        </View>
+                      )}
+                      {isCurrentAdmin && <Text style={styles.gearIcon}>⚙️</Text>}
+                    </View>
+                  </TouchableOpacity>
+
+                  {/* 🗑️ Botón de eliminar visible solo para el Admin y que no sea él mismo */}
+                  {isCurrentAdmin && !isUserAdmin && (
+                    <TouchableOpacity
+                      style={styles.removeMemberButton}
+                      onPress={() => handleRemoveMember(item.id, item.name)}
+                      activeOpacity={0.6}
+                    >
+                      <Text style={styles.removeIcon}>🗑️</Text>
+                    </TouchableOpacity>
                   )}
-                  {isCurrentAdmin && <Text style={styles.gearIcon}>⚙️</Text>}
                 </View>
-              </TouchableOpacity>
-            );
-          }}
-        />
-      </View>
+              );
+            }}
+          />
+        </View>
 
       {/* 🔲 MODAL DE AUDITORÍA Y CONTROL DE TAREAS (ADMIN/PROPIO) */}
       <Modal
@@ -381,11 +481,31 @@ const styles = StyleSheet.create({
     borderBottomColor: '#E5E5E5',
     elevation: 1,
   },
+titleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
   groupTitle: {
     fontSize: 22,
     fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 6,
+    color: '#1C1C1E',
+    flex: 1, // Evita que pise al botón si el nombre es muy largo
+    paddingRight: 10,
+  },
+  deleteGroupBtn: {
+    backgroundColor: '#FFF0F0',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#FFE0E0',
+  },
+  deleteGroupBtnText: {
+    color: '#DC3545',
+    fontSize: 12,
+    fontWeight: '700',
   },
   groupDesc: {
     fontSize: 14,
@@ -408,15 +528,35 @@ const styles = StyleSheet.create({
     color: '#333',
     marginBottom: 12,
   },
-  memberCard: {
-    backgroundColor: '#FFF',
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 8,
+memberCardWrapper: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    elevation: 1,
+    marginBottom: 10,
+  },
+  memberCard: {
+    flex: 1, // Hace que la tarjeta ocupe todo el espacio disponible dejando espacio al botón si existe
+    backgroundColor: '#FFF',
+    padding: 15,
+    borderRadius: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: '#EAEAEA',
+  },
+  removeMemberButton: {
+    width: 44,
+    height: 48,
+    backgroundColor: '#FFF0F0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 10,
+    marginLeft: 8,
+    borderWidth: 1,
+    borderColor: '#FFE0E0',
+  },
+  removeIcon: {
+    fontSize: 16,
   },
   memberInfo: {
     flexDirection: 'row',
